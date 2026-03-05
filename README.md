@@ -109,3 +109,7 @@ Kubernets => Orquestracao de containers K8s
 Clusters => Um conjunto de servidores.
 
 Pod => é um ecosistema, vai ter um IP, um container, e outras infos, um pod ele é menor unidade.
+No K8s quanda pecinha, cada coisa chamamos de node.
+Dentro de um POD eu posso ter mais de um container.
+
+ETCD => Banco de Dados do k8S
