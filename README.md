@@ -58,3 +58,54 @@ Docker Compose =>
 eu coloco uma orquestracao de containers front, back e banco
 e ele mesmo faz a conexao de todos
 os containers.
+
+Se você disser "Vou entrar no container" para uma pessoa engenheira sênior de verdade, ela vai rir. Sabe por quê?
+
+Porque Container não existe.
+
+Não existe um "objeto físico" ou uma máquina virtual chamada container. O que chamamos de container é apenas uma aplicação rodando no Linux, sobre a qual o Kernel aplicou duas "táticas de ilusão":
+
+Namespaces (A Ilusão da Solidão):
+
+O Linux engana a sua aplicação. Ele cria um namespace isolado e diz para o seu processo: "Você é o único que existe nesta máquina, você é o PID 1 (Process ID 1), você tem a sua própria placa de rede". A aplicação acredita e roda isolada.
+
+Cgroups (A Coleira de Recursos):
+
+Os Control Groups (Cgroups) limitam o uso de recursos de um processo. Você diz: "Essa aplicação só pode usar 500MB de RAM e meia CPU". Se ela tentar usar 501MB, o Kernel do Linux puxa a coleira.
+
+Quando você junta Namespaces + Cgroups + um sistema de arquivos isolado (Rootfs) = O mercado decidiu chamar isso de "Container".
+
+Subir 5 containers no seu notebook (usando Docker ou Podman) é fácil.
+
+Mas como você gerencia 5.000 containers distribuídos em 100 servidores (Nodes)? Se um servidor queimar a fonte de energia de madrugada, quem move os containers dele para os outros 99 servidores que ainda estão vivos?
+
+Isso é Orquestração. E o rei da orquestração é o Kubernetes (K8s).
+
+O Cérebro (Control Plane) e os Trabalhadores (Worker Nodes)
+O Kubernetes é dividido em duas grandes partes:
+
+Control Plane: É a gerência. Ele não roda a sua aplicação. Ele guarda anotações (etcd), decide onde os containers vão rodar (scheduler) e expõe uma recepção para você falar com ele (API Server).
+
+Worker Nodes: São os servidores braçais. Lá roda a sua aplicação.
+
+O Soldado do Linux: Kubelet
+Em cada Worker Node, roda um processo chamado Kubelet. Ele é quem recebe as ordens da gerência e fala pro Sistema Operacional (Linux): "Cria um Namespace e um Cgroup aqui pra essa aplicação rodar".
+
+O Superpoder: Desired State (Estado Desejado)
+O K8s trabalha com um conceito chamado Loop de Reconciliação.
+
+Você não diz para ele: "Crie 3 cópias do meu site".
+
+Você diz (Declarativo): "O Estado Desejado é existirem 3 cópias".
+
+O Kubernetes então entra num loop infinito de observação:
+
+Quantos sites eu tenho agora? 1.
+Qual é o desejo? 3.
+Ação: O Kubernetes manda o Kubelet subir mais 2 para empatar a realidade com o Desejo.
+
+Kubernets => Orquestracao de containers K8s
+
+Clusters => Um conjunto de servidores.
+
+Pod => é um ecosistema, vai ter um IP, um container, e outras infos, um pod ele é menor unidade.
