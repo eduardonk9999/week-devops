@@ -52,3 +52,9 @@ Tema do Dia 3: Containers e Orquestração para Engenharia da Escala
 (Spoiler: Você vai descobrir a maior mentira da internet: de que Kubernetes é mágica. Kubernetes é Linux).
 
 Aviso: Traga capacete amanhã. O atrito vai aumentar.
+
+Docker Compose =>
+É um arquivo em que eu faco a definicao do meu app, dentro dele
+eu coloco uma orquestracao de containers front, back e banco
+e ele mesmo faz a conexao de todos
+os containers.
