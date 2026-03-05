@@ -113,3 +113,16 @@ No K8s quanda pecinha, cada coisa chamamos de node.
 Dentro de um POD eu posso ter mais de um container.
 
 ETCD => Banco de Dados do k8S
+
+Pipeline => Cano, vc tem uma sequencia de coisas que vai passar por ele.
+
+CI - CD
+GitHub
+GitLab
+Tudo isso é CI - Continus integration =>
+Neles a gente configura uma pipeline,
+e o codigo vai comecar passar por staps,
+Ex: Teste de código, Teste unitarios, com isso temos uma qualidade de código antes de de finalizar o deploy.
+Tudo isso é CD - Continus Delivery =>
+Deploy, QA, Homolog, Prod....
+ 
