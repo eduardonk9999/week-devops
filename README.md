@@ -212,3 +212,221 @@ Kubernetes no cluster Cloud recebe o deploy e distribui entre as AZs
 Auto-scaling ajusta o número de Pods e Nodes conforme a demanda
 Isso é o que estamos montando ao longo da semana. Cada dia foi uma peça desse quebra-cabeça.
 
+
+Objetivo do Dia
+Construir, containerizar, deployar e automatizar uma aplicacao web completa, do git push ao Load Balancer publico na AWS.
+
+Voce sobreviveu a semana inteira. Linux, Terraform, Containers, Kubernetes, Cloud, CI/CD, tudo foi estudado de forma isolada, como pecas de um quebra-cabeca. Hoje acabou a teoria. Nos vamos montar o Transformer.
+
+O que vamos usar
+Ferramenta	Para que
+Node.js	Aplicacao backend (API)
+Docker	Empacotar a aplicacao
+EKS (eksctl)	Cluster Kubernetes na AWS
+kubectl	Gerenciar o cluster
+GitHub Actions	Pipeline CI/CD automatizada
+Docker Hub	Registro de imagens
+A Aplicacao: Semana DevOps Map
+Uma app interativa onde cada participante se cadastra com Nome, Localizacao e Cargo/Area. A app mostra em tempo real:
+
+Mapa interativo com pontos nos estados/paises dos participantes
+Painel de estatisticas (total, distribuicao por cargo)
+Feed ao vivo mostrando quem acabou de se cadastrar
+Nome do Pod que serviu cada requisicao (pra provar o balanceamento de carga!)
+Estrutura do Projeto
+dia5/
+├── app/                          # Aplicacao
+│   ├── server.js                 # Backend Express (API REST)
+│   ├── Dockerfile                # Container (multi-stage build)
+│   └── public/                   # Frontend interativo
+├── k8s/                          # Manifestos Kubernetes
+│   ├── namespace.yaml
+│   ├── deployment.yaml           # 3 replicas, probes, resource limits
+│   ├── service.yaml              # LoadBalancer
+│   └── hpa.yaml                  # Auto-scaling (3 a 10 pods)
+├── eks/
+│   └── cluster.yaml              # Configuracao do cluster EKS
+└── .github/workflows/
+    └── ci.yaml                   # Pipeline CI/CD
+As Rotas da API
+Metodo	Rota	O que faz
+GET	/	Serve o frontend (HTML)
+GET	/healthz	Health check (usado pelo K8s)
+POST	/api/participante	Cadastra um participante
+GET	/api/participantes	Lista todos
+GET	/api/stats	Estatisticas agregadas
+GET	/api/info	Info do app (versao, pod, uptime)
+
+Entendendo o Dockerfile (Multi-Stage Build)
+# Stage 1: Instalar dependencias (imagem temporaria)
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Stage 2: Imagem final (so o necessario)
+FROM node:20-alpine AS production
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY server.js ./
+COPY public/ ./public/
+RUN chown -R appuser:appgroup /app
+USER appuser
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+CMD wget --no-verbose --tries=1 --spider http://localhost:3000/healthz || exit 1
+CMD ["node", "server.js"]
+Conceitos importantes:
+
+Multi-stage build: imagem final nao tem instaladores nem cache
+Alpine: imagem base leve (~5MB vs ~1GB do Ubuntu)
+Non-root user: nunca rode como root dentro do container!
+HEALTHCHECK: Docker sabe se a app esta saudavel
+Buildando e Rodando
+# Build da imagem
+docker build -t devops-map-brasil:v1 .
+
+# Rodar em background
+docker run -d --name devops-map -p 3000:3000 devops-map-brasil:v1
+
+# Testar
+curl http://localhost:3000/healthz
+curl -X POST http://localhost:3000/api/participante \
+  -H "Content-Type: application/json" \
+  -d '{"nome":"Jeferson","estado":"SP","cargo":"DevOps"}'
+A imagem final tem ~180MB (Alpine + Node + App). Compare com node:20 (>1GB).
+
+Subindo para o Docker Hub
+docker login
+docker tag devops-map-brasil:v1 SEU_USER/devops-map-brasil:v1
+docker tag devops-map-brasil:v1 SEU_USER/devops-map-brasil:latest
+docker push SEU_USER/devops-map-brasil:v1
+docker push SEU_USER/devops-map-brasil:latest
+Troque SEU_USER pelo seu usuario do Docker Hub!
+
+Cluster EKS e Deploy no Kubernetes
+Criando o Cluster EKS
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: semana-devops
+  region: us-east-1
+  version: "1.31"
+managedNodeGroups:
+  - name: workers
+    instanceType: t3.medium
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 4
+    volumeSize: 20
+# Criar o cluster (~15-20 minutos)
+eksctl create cluster -f dia5/eks/cluster.yaml
+
+# Verificar
+kubectl get nodes
+Aplicando os Manifestos
+# Editar deployment.yaml e trocar <SEU_DOCKERHUB_USER>
+
+# Aplicar na ordem
+kubectl apply -f dia5/k8s/namespace.yaml
+kubectl apply -f dia5/k8s/deployment.yaml
+kubectl apply -f dia5/k8s/service.yaml
+kubectl apply -f dia5/k8s/hpa.yaml
+Verificando o Deploy
+# Ver os pods (3 replicas!)
+kubectl get pods -n semana-devops
+
+# Ver o Service e pegar o EXTERNAL-IP
+kubectl get svc -n semana-devops
+Output esperado:
+
+NAME                TYPE           CLUSTER-IP    EXTERNAL-IP                           PORT(S)
+devops-map-brasil   LoadBalancer   10.100.x.x    aXXX.us-east-1.elb.amazonaws.com     80:31234/TCP
+Acesse o EXTERNAL-IP no navegador! A app esta no ar na AWS!
+
+Testando o Balanceamento de Carga
+Faca varios cadastros e observe o campo "Pod" no feed. Cada requisicao pode ser servida por um pod diferente!
+
+for i in $(seq 1 10); do
+  curl -s http://EXTERNAL_IP/api/info | jq .pod
+done
+
+CI/CD com GitHub Actions
+O Pipeline
+┌──────────┐    ┌───────────────┐    ┌─────────────┐
+│   Test   │───>│   Build &     │───>│   Deploy     │
+│  & Lint  │    │    Push       │    │   no EKS     │
+└──────────┘    └───────────────┘    └─────────────┘
+Test & Lint roda os testes e verifica o codigo
+Build & Push builda a imagem Docker e sobe pro Docker Hub
+Deploy atualiza a imagem no cluster EKS
+Configurando os Secrets
+No seu repositorio GitHub, va em Settings > Secrets and variables > Actions:
+
+Secret	Valor
+DOCKERHUB_USERNAME	Seu usuario do Docker Hub
+DOCKERHUB_TOKEN	Token de acesso (nao a senha!)
+AWS_ACCESS_KEY_ID	Chave de acesso AWS
+AWS_SECRET_ACCESS_KEY	Secret da chave AWS
+NUNCA coloque credenciais direto no codigo. Use Secrets sempre!
+
+Primeiro Deploy Automatizado
+# Fazer uma alteracao na app
+# Edite server.js e mude APP_VERSION para "2.0.0"
+
+# Commit e push
+git add .
+git commit -m "feat: deploy v2 do Semana DevOps Map"
+git push origin main
+Acompanhe o pipeline na aba Actions do repositorio!
+
+Engenharia do Caos
+Hora de quebrar as coisas propositalmente e ver o Kubernetes se curar sozinho.
+
+Deletando Pods
+kubectl delete pods -n semana-devops -l app=devops-map-brasil
+
+# Imediatamente veja o K8s recriando:
+kubectl get pods -n semana-devops -w
+Os pods novos sobem em SEGUNDOS. Isso e o Loop de Reconciliacao: o K8s viu que a realidade (0 pods) era diferente do estado desejado (3 pods) e agiu.
+
+Simulando OOMKill
+# Dar muito pouca memoria (forcar OOMKill)
+kubectl set resources deployment/devops-map-brasil \
+  -n semana-devops --limits=memory=10Mi
+
+# STATUS = OOMKilled > CrashLoopBackOff
+# Isso e o KERNEL DO LINUX matando o processo que violou o cgroup!
+
+# Corrigir:
+kubectl set resources deployment/devops-map-brasil \
+  -n semana-devops --limits=memory=256Mi --requests=memory=128Mi
+Rolling Update sem Downtime
+kubectl set image deployment/devops-map-brasil \
+  devops-map-brasil=SEU_USER/devops-map-brasil:v2 -n semana-devops
+
+kubectl rollout status deployment/devops-map-brasil -n semana-devops
+
+# Deu ruim? ROLLBACK instantaneo!
+kubectl rollout undo deployment/devops-map-brasil -n semana-devops
+Comandos Uteis
+# Descrever pod (eventos, erros)
+kubectl describe pod <NOME_DO_POD> -n semana-devops
+
+# Shell dentro do container
+kubectl exec -it <NOME_DO_POD> -n semana-devops -- sh
+
+# Ver eventos do namespace
+kubectl get events -n semana-devops --sort-by=.metadata.creationTimestamp
+
+# HPA
+kubectl get hpa -n semana-devops
+
+# Uso de recursos
+kubectl top pods -n semana-devops
+Limpeza (IMPORTANTE!)
+Para nao tomar um susto na fatura da AWS, delete o cluster apos a aula!
+
+kubectl delete -f dia5/k8s/
+eksctl delete cluster -f dia5/eks/cluster.yaml --disable-nodegroup-eviction
