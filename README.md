@@ -430,3 +430,5 @@ Para nao tomar um susto na fatura da AWS, delete o cluster apos a aula!
 
 kubectl delete -f dia5/k8s/
 eksctl delete cluster -f dia5/eks/cluster.yaml --disable-nodegroup-eviction
+
+
